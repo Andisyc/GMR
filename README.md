@@ -220,6 +220,37 @@ python scripts/vis_robot_motion.py --robot <robot_name> --robot_motion_path <pat
 If you want to record video, add `--record_video` and `--video_path <your_video_path,mp4>`.
 
 
+## Using GMR with PHMR
+
+To use GMR with PHMR (Pose Human Motion Reconstruction) results:
+
+1. **Prepare PHMR results**: Place your PHMR output files in the `phmr_result/` directory
+
+2. **Convert PHMR to AMASS format**: Run the conversion script to extract PHMR results into AMASS-compatible SMPL-X format:
+```bash
+bash run_convert_phmr.sh
+```
+
+3. **Retarget to robot motion**: Use the conversion script to retarget the motion to Unitree G1 robot:
+```bash
+bash run_convert_unitree.sh
+```
+
+4. **Visualize the converted robot motion**: To visualize the retargeted robot motion, edit and run the visualization script:
+```bash
+# Edit run_vis_smplx.sh to specify your robot motion file path
+bash run_vis_smplx.sh
+```
+This will generate a video of the robot performing the retargeted motion.
+
+5. **Generate CSV for BeyondMimicry training** (optional): If you need to preprocess the robot motion data for BeyondMimicry training, convert the PKL files to CSV format:
+```bash
+bash convert_pkl_to_csv.sh
+```
+
+The final CSV files will contain the robot motion data ready for training with BeyondMimicry or other learning frameworks.
+
+
 # Speed Benchmark
 
 | CPU | Retargeting Speed |
