@@ -86,3 +86,43 @@ Add `--record_video --video_path <output.mp4>` to any visualization command to r
   - SMPL-X configs: `smplx_to_{g1,t1,toddy,n1,pm01,kuavo,hi,r1pro}.json`
   - BVH configs: `bvh_to_{g1,t1,toddy,n1,pm01}.json`
   - FBX configs: `fbx_to_g1.json`
+
+## PKL to CSV Conversion
+
+The `scripts/convert_pkl_to_csv.py` script converts retargeted motion PKL files to CSV format for robot control.
+
+### Supported Robot DOF Configurations
+
+| Robot | DOFs | Description |
+|-------|------|-------------|
+| HighTorque Hi | 25 | Body only |
+| Unitree G1 | 29 | Body only |
+| G1 + Inspired Hands | 41 | 29 body + 6 left hand + 6 right hand actuators |
+
+### G1 with Inspired Hands (g1_inspired)
+
+- **XML**: `assets/g1_inspired/g1_inspirehands.xml`
+- **Total joints**: 53 (includes coupled finger joints)
+- **Actuators**: 41 (coupled joints driven by equality constraints)
+
+**PKL to Actuator Mapping (53 DOFs → 41 actuators)**:
+- DOFs 0-21: Body (legs + waist + left arm) → Actuators 0-21
+- DOFs 22-33: Left hand (12 joints) → 6 actuators (indices 22, 23, 26, 28, 30, 32)
+- DOFs 34-40: Right arm → Actuators 28-34
+- DOFs 41-52: Right hand (12 joints) → 6 actuators (indices 41, 42, 45, 47, 49, 51)
+
+**Left/Right hand actuated joints** (6 each):
+- thumb_proximal_yaw, thumb_proximal_pitch
+- index_proximal, middle_proximal, ring_proximal, pinky_proximal
+
+### CSV Output Format
+
+- Columns 0-2: root position (x, y, z)
+- Columns 3-6: root rotation quaternion (x, y, z, w)
+- Columns 7+: DOF positions (joint angles)
+
+### Usage
+```bash
+python scripts/convert_pkl_to_csv.py <pkl_path> -d <dofs> -o <output.csv>
+# Example: python scripts/convert_pkl_to_csv.py motion.pkl -d 41 -o motion.csv
+```

@@ -25,7 +25,7 @@ if __name__ == "__main__":
     
     env = RobotMotionViewer(robot_type=robot_type,
                             motion_fps=motion_fps,
-                            record_video=args.record_video, video_path=args.video_path)
+                            record_video=args.record_video, video_path=args.video_path, show_viewer=False)
     
     for i in tqdm(range(len(motion_root_pos))):
         env.step(motion_root_pos[i], 

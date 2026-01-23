@@ -48,6 +48,8 @@ class RobotMotionViewer:
                 camera_follow=True,
                 motion_fps=30,
                 transparent_robot=0,
+                # toggle on-screen viewer (GLFW). Set False for headless recording
+                show_viewer=True,
                 # video recording
                 record_video=False,
                 video_path=None,
@@ -66,15 +68,17 @@ class RobotMotionViewer:
         self.rate_limiter = RateLimiter(frequency=self.motion_fps, warn=False)
         self.camera_follow = camera_follow
         self.record_video = record_video
+        self.show_viewer = show_viewer
 
 
-        self.viewer = mjv.launch_passive(
-            model=self.model,
-            data=self.data,
-            show_left_ui=False,
-            show_right_ui=False)      
-
-        self.viewer.opt.flags[mj.mjtVisFlag.mjVIS_TRANSPARENT] = transparent_robot
+        self.viewer = None
+        if self.show_viewer:
+            self.viewer = mjv.launch_passive(
+                model=self.model,
+                data=self.data,
+                show_left_ui=False,
+                show_right_ui=False)
+            self.viewer.opt.flags[mj.mjtVisFlag.mjVIS_TRANSPARENT] = transparent_robot
         
         if self.record_video:
             assert video_path is not None, "Please provide video path for recording"
@@ -88,7 +92,13 @@ class RobotMotionViewer:
             
             # Initialize renderer for video recording
             self.renderer = mj.Renderer(self.model, height=video_height, width=video_width)
-        
+            
+            # Offscreen camera for headless rendering (used when show_viewer is False)
+            self.offscreen_cam = mj.MjvCamera()
+            mj.mjv_defaultCamera(self.offscreen_cam)
+            self.offscreen_cam.distance = self.viewer_cam_distance
+            self.offscreen_cam.elevation = -10
+    
     def step(self, 
             # robot data
             root_pos, root_rot, dof_pos, 
@@ -120,12 +130,19 @@ class RobotMotionViewer:
         mj.mj_forward(self.model, self.data)
         
         if follow_camera:
-            self.viewer.cam.lookat = self.data.xpos[self.model.body(self.robot_base).id]
-            self.viewer.cam.distance = self.viewer_cam_distance
-            self.viewer.cam.elevation = -10  # 正面视角，轻微向下看
-            # self.viewer.cam.azimuth = 180    # 正面朝向机器人
+            if self.show_viewer and self.viewer is not None:
+                self.viewer.cam.lookat = self.data.xpos[self.model.body(self.robot_base).id]
+                self.viewer.cam.distance = self.viewer_cam_distance
+                self.viewer.cam.elevation = -10  # 正面视角，轻微向下看
+                # self.viewer.cam.azimuth = 180    # 正面朝向机器人
+            elif self.record_video:
+                # Update offscreen camera when running headless
+                lookat = self.data.xpos[self.model.body(self.robot_base).id]
+                self.offscreen_cam.lookat[:] = lookat
+                self.offscreen_cam.distance = self.viewer_cam_distance
+                self.offscreen_cam.elevation = -10
         
-        if human_motion_data is not None:
+        if human_motion_data is not None and self.show_viewer and self.viewer is not None:
             # Clean custom geometry
             self.viewer.user_scn.ngeom = 0
             # Draw the task targets for reference
@@ -139,18 +156,21 @@ class RobotMotionViewer:
                     joint_name=human_body_name if show_human_body_name else None
                     )
 
-        self.viewer.sync()
+        if self.show_viewer and self.viewer is not None:
+            self.viewer.sync()
         if rate_limit is True:
             self.rate_limiter.sleep()
 
         if self.record_video:
             # Use renderer for proper offscreen rendering
-            self.renderer.update_scene(self.data, camera=self.viewer.cam)
+            cam = self.viewer.cam if (self.show_viewer and self.viewer is not None) else self.offscreen_cam
+            self.renderer.update_scene(self.data, camera=cam)
             img = self.renderer.render()
             self.mp4_writer.append_data(img)
     
     def close(self):
-        self.viewer.close()
+        if self.show_viewer and self.viewer is not None:
+            self.viewer.close()
         time.sleep(0.5)
         if self.record_video:
             self.mp4_writer.close()

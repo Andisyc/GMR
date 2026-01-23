@@ -179,7 +179,7 @@ def main():
                         )
     
     parser.add_argument("--override", default=False, action="store_true")
-    parser.add_argument("--num_cpus", default=4, type=int)
+    parser.add_argument("--num_cpus", default=32, type=int)
     args = parser.parse_args()
     
     # print the total number of cpus and gpus
