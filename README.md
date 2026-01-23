@@ -220,35 +220,82 @@ python scripts/vis_robot_motion.py --robot <robot_name> --robot_motion_path <pat
 If you want to record video, add `--record_video` and `--video_path <your_video_path,mp4>`.
 
 
-## Using GMR with PHMR
+## Using GMR with PHMR for BeyondMimic Training
 
-To use GMR with PHMR (Pose Human Motion Reconstruction) results:
+This section describes how to process [PHMR](https://github.com/lithiumice/PHMR) (Pose Human Motion Reconstruction) results for training with [BeyondMimic](https://github.com/lithiumice/BeyondMimic).
 
-1. **Prepare PHMR results**: Place your PHMR output files in the `phmr_result/` directory
+### Step 1: Convert PHMR to SMPL-X Format
 
-2. **Convert PHMR to AMASS format**: Run the conversion script to extract PHMR results into AMASS-compatible SMPL-X format:
+Use `run_convert_phmr.sh` to convert PHMR estimation results to AMASS-compatible SMPL-X format:
+
 ```bash
+# Basic usage (extracts first person by default)
+python scripts/convert_phmr_to_smplx.py --input phmr_result/<video_name>/results.pkl --output motion_data/Phmr/<output_name>.pkl
+
+# For multi-person videos, use --person_id to extract a specific person
+python scripts/convert_phmr_to_smplx.py --input phmr_result/<video_name>/results.pkl --output motion_data/Phmr/<output_name>.pkl --person_id 2
+```
+
+**Note**: If your video contains multiple people, PHMR will track each person separately. Use `--person_id` to select which person to extract (0, 1, 2, etc.).
+
+### Step 2: Retarget to Robot Motion
+
+Convert the SMPL-X data to robot motion using the retargeting pipeline:
+
+```bash
+# Single file
+python scripts/smplx_to_robot.py --smplx_file motion_data/Phmr/<file>.pkl --robot unitree_g1 --save_path robot_data/<output>.pkl
+
+# Batch processing
+python scripts/smplx_to_robot_dataset.py --src_folder motion_data/Phmr/ --tgt_folder robot_data/UnitreeG1/phmr/ --robot unitree_g1 --num_cpus 24
+```
+
+### Step 3: Convert PKL to CSV for BeyondMimic
+
+Use `convert_pkl_to_csv.sh` to convert the retargeted robot motion to CSV format compatible with BeyondMimic training:
+
+```bash
+# Convert a single PKL file to CSV
+python scripts/convert_pkl_to_csv.py <robot_motion.pkl> -o <output.csv> -d <dofs>
+
+# DOF options:
+#   -d 25  : HighTorque Hi (body only)
+#   -d 29  : Unitree G1 (body only)
+#   -d 41  : G1 + Inspired Hands (29 body + 12 hand actuators)
+```
+
+**CSV Output Format** (compatible with BeyondMimic):
+- Columns 0-2: root position (x, y, z)
+- Columns 3-6: root rotation quaternion (x, y, z, w)
+- Columns 7+: joint angles (DOF positions)
+
+### Batch Processing Scripts
+
+For convenience, use the provided shell scripts:
+
+```bash
+# Step 1: Convert PHMR results
 bash run_convert_phmr.sh
-```
 
-3. **Retarget to robot motion**: Use the conversion script to retarget the motion to Unitree G1 robot:
-```bash
+# Step 2: Retarget to robot
 bash run_convert_unitree.sh
-```
 
-4. **Visualize the converted robot motion**: To visualize the retargeted robot motion, edit and run the visualization script:
-```bash
-# Edit run_vis_smplx.sh to specify your robot motion file path
-bash run_vis_smplx.sh
-```
-This will generate a video of the robot performing the retargeted motion.
-
-5. **Generate CSV for BeyondMimicry training** (optional): If you need to preprocess the robot motion data for BeyondMimicry training, convert the PKL files to CSV format:
-```bash
+# Step 3: Convert to CSV (single file)
 bash convert_pkl_to_csv.sh
+
+# Step 3 alternative: Batch convert all PKL files in a directory
+bash convert_pkl_to_csv_batch.sh <input_dir> <output_dir>
 ```
 
-The final CSV files will contain the robot motion data ready for training with BeyondMimicry or other learning frameworks.
+### Visualization (Optional)
+
+```bash
+# Visualize retargeted robot motion
+python scripts/vis_robot_motion.py --robot unitree_g1 --robot_motion_path <path.pkl>
+
+# Record video
+python scripts/vis_robot_motion.py --robot unitree_g1 --robot_motion_path <path.pkl> --record_video --video_path output.mp4
+```
 
 
 # Speed Benchmark
