@@ -102,5 +102,5 @@ PythonClient/
 TEST_MOTIONS_MY.md
 
 tmp/
-
 motion_data/
+motion_smplx/
