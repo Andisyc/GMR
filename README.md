@@ -85,21 +85,22 @@ https://github.com/user-attachments/assets/28ee6f0f-be30-42bb-8543-cf1152d97724
 | Assigned ID | Robot/Data Format | Robot DoF | SMPLX ([AMASS](https://amass.is.tue.mpg.de/), [OMOMO](https://github.com/lijiaman/omomo_release)) | BVH ( [LAFAN1](https://github.com/ubisoft/ubisoft-laforge-animation-dataset)) | FBX ( [OptiTrack](https://www.optitrack.com/)) | More formats coming soon | 
 | --- | --- | --- | --- | --- | --- | --- |
 | 0 | Unitree G1 `unitree_g1` | Leg (2\*6) + Waist (3) + Arm (2\*7) = 29 | ✅ | ✅ | ✅ |
-| 1 | Unitree G1 with Hands `unitree_g1_with_hands` | Leg (2\*6) + Waist (3) + Arm (2\*7) + Hand (2\*7) = 43 | ✅ | ✅ | ✅ |
-| 2 | Unitree H1 `unitree_h1` | Leg (2\*5) + Waist (1) + Arm (2\*4) = 19 | ✅ | TBD | TBD |
-| 3 | Booster T1 `booster_t1` | TBD | ✅ |  ✅  | TBD | 
-| 4 | Booster K1 `booster_k1` | Neck (2) + Arm (2\*4) + Leg (2\*6) = 22 | ✅ | TBD | TBD |
-| 5 | Stanford ToddlerBot `stanford_toddy` | TBD | ✅ | ✅ | TBD |
-| 6 | Fourier N1 `fourier_n1` | TBD | ✅ | ✅ | TBD |
-| 7 | ENGINEAI PM01 `engineai_pm01` | TBD | ✅ | ✅ | TBD |
-| 8 | HighTorque Hi `hightorque_hi` | Head (2) + Arm (2\*5) + Waist (1) + Leg (2\*6) = 25 | ✅ | TBD | TBD |
-| 9 | Galaxea R1 Pro `galaxea_r1pro` (this is a wheeled robot!) |  Base (6) + Torso (4) + Arm (2*7) = 24 | ✅ | TBD | TBD |
-| 10 | Kuavo `kuavo_s45` |  Head (2) + Arm (2\*7) + Leg (2\*6) = 28 | ✅ | TBD | TBD |
+| 1 | Unitree G1 23-DOF `unitree_g1_23dof` | Leg (2\*6) + Waist yaw (1) + Arm (2\*5) = 23 | ✅ | — | — |
+| 2 | Unitree G1 with Hands `unitree_g1_with_hands` | Leg (2\*6) + Waist (3) + Arm (2\*7) + Hand (2\*7) = 43 | ✅ | ✅ | ✅ |
+| 3 | Unitree H1 `unitree_h1` | Leg (2\*5) + Waist (1) + Arm (2\*4) = 19 | ✅ | TBD | TBD |
+| 4 | Booster T1 `booster_t1` | TBD | ✅ |  ✅  | TBD |
+| 5 | Booster K1 `booster_k1` | Neck (2) + Arm (2\*4) + Leg (2\*6) = 22 | ✅ | TBD | TBD |
+| 6 | Stanford ToddlerBot `stanford_toddy` | TBD | ✅ | ✅ | TBD |
+| 7 | Fourier N1 `fourier_n1` | TBD | ✅ | ✅ | TBD |
+| 8 | ENGINEAI PM01 `engineai_pm01` | TBD | ✅ | ✅ | TBD |
+| 9 | HighTorque Hi `hightorque_hi` | Head (2) + Arm (2\*5) + Waist (1) + Leg (2\*6) = 25 | ✅ | TBD | TBD |
+| 10 | Galaxea R1 Pro `galaxea_r1pro` (this is a wheeled robot!) |  Base (6) + Torso (4) + Arm (2*7) = 24 | ✅ | TBD | TBD |
+| 11 | Kuavo `kuavo_s45` |  Head (2) + Arm (2\*7) + Leg (2\*6) = 28 | ✅ | TBD | TBD |
 | More robots coming soon ! |
-| 11 | Berkeley Humanoid Lite `berkeley_humanoid_lite` | TBD | TBD | TBD | TBD |
-| 12 | AgiBot A2 `agibot_a2` | TBD | TBD | TBD | TBD |
-| 13 | Openlong `openlong` | TBD | TBD | TBD | TBD |
-| 14 | PND Adam Lite `pnd_adam_lite` | TBD | TBD | TBD | TBD |
+| 12 | Berkeley Humanoid Lite `berkeley_humanoid_lite` | TBD | TBD | TBD | TBD |
+| 13 | AgiBot A2 `agibot_a2` | TBD | TBD | TBD | TBD |
+| 14 | Openlong `openlong` | TBD | TBD | TBD | TBD |
+| 15 | PND Adam Lite `pnd_adam_lite` | TBD | TBD | TBD | TBD |
 
 
 
@@ -248,6 +249,10 @@ python scripts/smplx_to_robot.py --smplx_file motion_data/Phmr/<file>.pkl --robo
 
 # Batch processing
 python scripts/smplx_to_robot_dataset.py --src_folder motion_data/Phmr/ --tgt_folder robot_data/UnitreeG1/phmr/ --robot unitree_g1 --num_cpus 24
+
+# G1 23-DOF variant
+python scripts/smplx_to_robot.py --smplx_file motion_data/Phmr/<file>.pkl --robot unitree_g1_23dof --save_path robot_data/<output>_23dof.pkl
+python scripts/smplx_to_robot_dataset.py --src_folder motion_data/Phmr/ --tgt_folder robot_data/UnitreeG1/phmr_23dof/ --robot unitree_g1_23dof --num_cpus 24
 ```
 
 ### Step 3: Convert PKL to CSV for BeyondMimic
@@ -259,6 +264,7 @@ Use `convert_pkl_to_csv.sh` to convert the retargeted robot motion to CSV format
 python scripts/convert_pkl_to_csv.py <robot_motion.pkl> -o <output.csv> -d <dofs>
 
 # DOF options:
+#   -d 23  : Unitree G1 23-DOF body
 #   -d 25  : HighTorque Hi (body only)
 #   -d 29  : Unitree G1 (body only)
 #   -d 41  : G1 + Inspired Hands (29 body + 12 hand actuators)

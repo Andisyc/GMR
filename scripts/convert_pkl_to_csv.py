@@ -6,6 +6,15 @@ import argparse
 from pathlib import Path
 
 
+# Standard G1 29-DOF order with waist roll/pitch and wrist pitch/yaw removed.
+# This is a semantic mapping for G1 motion data, not a generic truncation.
+G1_29_TO_23_INDICES = np.array([
+    *range(13),
+    15, 16, 17, 18, 19,
+    22, 23, 24, 25, 26,
+])
+
+
 def load_pkl_data(pkl_path):
     """Load the PKL file containing retargeted motion data."""
     with open(pkl_path, 'rb') as f:
@@ -26,7 +35,7 @@ def convert_pkl_to_csv_format(pkl_data, target_dofs=None):
     
     Args:
         pkl_data: Dictionary containing motion data
-        target_dofs: Target number of DOFs (25 or 29). If None, uses input DOFs.
+        target_dofs: Target number of DOFs (23, 25, 29, or 41). If None, uses input DOFs.
     """
     
     n_frames = len(pkl_data['root_pos'])
@@ -66,6 +75,11 @@ def convert_pkl_to_csv_format(pkl_data, target_dofs=None):
         # Truncate from 29 to 25 DOFs (remove last 4 joints)
         csv_data[:, 7:32] = pkl_data['dof_pos'][:, :25]
         print("Truncated 29 DOFs to 25 DOFs (removed last 4 DOFs)")
+    elif n_input_dofs == 29 and n_output_dofs == 23:
+        csv_data[:, 7:7+n_output_dofs] = pkl_data['dof_pos'][:, G1_29_TO_23_INDICES]
+        print("Mapped Unitree G1 29 DOFs to the semantic 23-DOF order")
+    elif n_input_dofs == 23 and n_output_dofs == 29:
+        raise ValueError("23-DOF to 29-DOF export is undefined; retarget directly to unitree_g1 instead")
     elif n_input_dofs == 53 and n_output_dofs == 41:
         # G1 with inspired hands: 53 joints → 41 actuators
         # The robot has coupled finger joints, so we only extract actuated joints
@@ -110,8 +124,8 @@ def main():
     parser = argparse.ArgumentParser(description='Convert PKL motion file to CSV format')
     parser.add_argument('pkl_path', type=str, help='Path to input PKL file')
     parser.add_argument('-o', '--output', type=str, help='Output CSV file path (optional)')
-    parser.add_argument('-d', '--dofs', type=int, choices=[25, 29, 41],
-                        help='Target number of DOFs (25=hi, 29=g1, 41=g1_inspired). If not specified, keeps original DOFs.')
+    parser.add_argument('-d', '--dofs', type=int, choices=[23, 25, 29, 41],
+                        help='Target number of DOFs (23=g1_23dof, 25=hi, 29=g1, 41=g1_inspired). If not specified, keeps original DOFs.')
     
     args = parser.parse_args()
     
@@ -134,8 +148,8 @@ def main():
     print(f"Input DOFs: {n_input_dofs}")
     
     # Validate DOF compatibility
-    if n_input_dofs not in [25, 29, 53]:
-        print(f"Warning: Unusual number of input DOFs ({n_input_dofs}). Expected 25, 29, or 53.")
+    if n_input_dofs not in [23, 25, 29, 41, 53]:
+        print(f"Warning: Unusual number of input DOFs ({n_input_dofs}). Expected 23, 25, 29, 41, or 53.")
     
     # Convert to CSV format
     print("Converting to CSV format...")

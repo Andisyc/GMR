@@ -16,11 +16,22 @@ def load_smplx_file(smplx_file, smplx_body_model_path):
         "smplx",
         gender=str(smplx_data["gender"]),
         use_pca=False,
+        ext="pkl",
+        num_betas=16,
+        num_expression_coeffs=10,
     )
     
     num_frames = smplx_data["pose_body"].shape[0]
+    betas = np.asarray(smplx_data["betas"]).reshape(-1)
+    if betas.size < body_model.num_betas:
+        raise ValueError(
+            f"SMPL-X motion provides {betas.size} betas, "
+            f"but the configured body model requires {body_model.num_betas}"
+        )
+    betas = torch.tensor(betas[:body_model.num_betas]).float()
+    betas = betas.unsqueeze(0).expand(num_frames, -1).contiguous()
     smplx_output = body_model(
-        betas=torch.tensor(smplx_data["betas"]).float().view(1, -1), # (16,)
+        betas=betas,
         global_orient=torch.tensor(smplx_data["root_orient"]).float(), # (N, 3)
         body_pose=torch.tensor(smplx_data["pose_body"]).float(), # (N, 63)
         transl=torch.tensor(smplx_data["trans"]).float(), # (N, 3)
@@ -29,7 +40,7 @@ def load_smplx_file(smplx_file, smplx_body_model_path):
         jaw_pose=torch.zeros(num_frames, 3).float(),
         leye_pose=torch.zeros(num_frames, 3).float(),
         reye_pose=torch.zeros(num_frames, 3).float(),
-        # expression=torch.zeros(num_frames, 10).float(),
+        expression=torch.zeros(num_frames, body_model.num_expression_coeffs).float(),
         return_full_pose=True,
     )
     
