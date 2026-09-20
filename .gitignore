@@ -102,5 +102,7 @@ PythonClient/
 TEST_MOTIONS_MY.md
 
 tmp/
+assets/
 motion_data/
 motion_smplx/
+motion_phmr/
