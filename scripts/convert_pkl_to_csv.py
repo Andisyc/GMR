@@ -112,6 +112,7 @@ def convert_pkl_to_csv_format(pkl_data, target_dofs=None):
 
 def save_to_csv(csv_data, output_path):
     """Save the converted data to CSV file."""
+    Path(output_path).parent.mkdir(parents=True, exist_ok=True)
     # Create DataFrame
     df = pd.DataFrame(csv_data)
     
