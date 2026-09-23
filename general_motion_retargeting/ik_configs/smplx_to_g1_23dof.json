@@ -5,6 +5,9 @@
     "human_height_assumption": 1.8,
     "use_ik_match_table1": true,
     "use_ik_match_table2": true,
+    "use_separate_ik_offsets": true,
+    "posture_cost": 0.1,
+    "output_joint_velocity_limit": 9.42477796076938,
     "human_scale_table": {
         "pelvis": 0.9,
         "spine3": 0.9,
@@ -28,7 +31,7 @@
         "pelvis": [
             "pelvis",
             100,
-            10,
+            100,
             [
                 0.0,
                 0.0,
@@ -73,7 +76,7 @@
                 -0.5
             ]
         ],
-        "left_ankle_roll_link": [
+        "left_toe_link": [
             "left_foot",
             100,
             10,
@@ -121,7 +124,7 @@
                 -0.5
             ]
         ],
-        "right_ankle_roll_link": [
+        "right_toe_link": [
             "right_foot",
             100,
             10,
@@ -153,7 +156,7 @@
                 -0.5
             ]
         ],
-        "left_shoulder_roll_link": [
+        "left_shoulder_yaw_link": [
             "left_shoulder",
             0,
             10,
@@ -201,7 +204,7 @@
                 0.0
             ]
         ],
-        "right_shoulder_roll_link": [
+        "right_shoulder_yaw_link": [
             "right_shoulder",
             0,
             10,
@@ -254,7 +257,7 @@
         "pelvis": [
             "pelvis",
             100,
-            5,
+            100,
             [
                 0.0,
                 0.0,
@@ -300,7 +303,7 @@
                 -0.5
             ]
         ],
-        "left_ankle_roll_link": [
+        "left_toe_link": [
             "left_foot",
             100,
             50,
@@ -343,7 +346,7 @@
                 -0.5
             ]
         ],
-        "right_ankle_roll_link": [
+        "right_toe_link": [
             "right_foot",
             100,
             50,
@@ -370,7 +373,7 @@
                 -0.5
             ]
         ],
-        "left_shoulder_roll_link": [
+        "left_shoulder_yaw_link": [
             "left_shoulder",
             10,
             5,
@@ -418,7 +421,7 @@
                 0.0
             ]
         ],
-        "right_shoulder_roll_link": [
+        "right_shoulder_yaw_link": [
             "right_shoulder",
             10,
             5,

@@ -19,6 +19,7 @@ class GeneralMotionRetargeting:
         damping: float=5e-1, # change from 1e-1 to 1e-2.
         verbose: bool=True,
         use_velocity_limit: bool=True,
+        output_fps: float=None,
     ) -> None:
 
         # load the robot model
@@ -77,8 +78,23 @@ class GeneralMotionRetargeting:
         self.robot_root_name = ik_config["robot_root_name"]
         self.use_ik_match_table1 = ik_config["use_ik_match_table1"]
         self.use_ik_match_table2 = ik_config["use_ik_match_table2"]
+        self.use_separate_ik_offsets = ik_config.get("use_separate_ik_offsets", False)
+        self.posture_cost = ik_config.get("posture_cost", 0.0)
+        self.output_joint_velocity_limit = ik_config.get("output_joint_velocity_limit")
+        self.output_fps = output_fps
         self.human_scale_table = ik_config["human_scale_table"]
         self.ground = ik_config["ground_height"] * np.array([0, 0, 1])
+
+        if self.output_joint_velocity_limit is not None:
+            if self.output_fps is None or self.output_fps <= 0:
+                raise ValueError("output_fps must be positive when output joint velocity limiting is enabled")
+            self.actuated_qpos_indices = np.array([
+                self.model.jnt_qposadr[self.model.actuator_trnid[i, 0]]
+                for i in range(self.model.nu)
+            ], dtype=int)
+        else:
+            self.actuated_qpos_indices = np.array([], dtype=int)
+        self.previous_output_qpos = None
 
         self.max_iter = 10
 
@@ -145,32 +161,56 @@ class GeneralMotionRetargeting:
                 self.tasks2.append(task)
                 self.task_errors2[task] = []
 
+        self.posture_task = None
+        if self.posture_cost > 0:
+            self.posture_task = mink.PostureTask(self.model, cost=self.posture_cost)
+            self.tasks1.append(self.posture_task)
+            self.tasks2.append(self.posture_task)
+
   
     def update_targets(self, human_data, offset_to_ground=False):
         # scale human data in local frame
         human_data = self.to_numpy(human_data)
         human_data = self.scale_human_data(human_data, self.human_root_name, self.human_scale_table)
-        human_data = self.offset_human_data(human_data, self.pos_offsets1, self.rot_offsets1)
+
+        human_data1 = self.offset_human_data(human_data, self.pos_offsets1, self.rot_offsets1)
+        if self.use_separate_ik_offsets:
+            human_data2 = self.offset_human_data(human_data, self.pos_offsets2, self.rot_offsets2)
+        else:
+            human_data2 = human_data1
+
         if offset_to_ground:
-            human_data = self.offset_human_data_to_ground(human_data)
-        self.scaled_human_data = human_data
+            human_data1 = self.offset_human_data_to_ground(human_data1)
+            if self.use_separate_ik_offsets:
+                human_data2 = self.offset_human_data_to_ground(human_data2)
+            else:
+                human_data2 = human_data1
+        self.scaled_human_data = human_data1
 
         if self.use_ik_match_table1:
             for body_name in self.human_body_to_task1.keys():
                 task = self.human_body_to_task1[body_name]
-                pos, rot = human_data[body_name]
+                pos, rot = human_data1[body_name]
                 task.set_target(mink.SE3.from_rotation_and_translation(mink.SO3(rot), pos))
         
         if self.use_ik_match_table2:
             for body_name in self.human_body_to_task2.keys():
                 task = self.human_body_to_task2[body_name]
-                pos, rot = human_data[body_name]
+                pos, rot = human_data2[body_name]
                 task.set_target(mink.SE3.from_rotation_and_translation(mink.SO3(rot), pos))
             
             
     def retarget(self, human_data, offset_to_ground=False):
         # Update the task targets
         self.update_targets(human_data, offset_to_ground)
+
+        if self.posture_task is not None:
+            posture_target = (
+                self.previous_output_qpos
+                if self.previous_output_qpos is not None
+                else self.configuration.data.qpos.copy()
+            )
+            self.posture_task.set_target(posture_target)
 
         if self.use_ik_match_table1:
             # Solve the IK problem
@@ -214,7 +254,25 @@ class GeneralMotionRetargeting:
                 num_iter += 1
                 
             
-        return self.configuration.data.qpos.copy()
+        qpos = self.configuration.data.qpos.copy()
+        if self.output_joint_velocity_limit is not None:
+            qpos = self._enforce_output_frame_limits(qpos)
+            self.configuration.update(qpos)
+        if self.posture_task is not None or self.output_joint_velocity_limit is not None:
+            self.previous_output_qpos = qpos.copy()
+        return qpos
+
+    def _enforce_output_frame_limits(self, qpos):
+        if self.previous_output_qpos is None or self.output_joint_velocity_limit is None:
+            return qpos
+
+        max_step = self.output_joint_velocity_limit / self.output_fps
+        indices = self.actuated_qpos_indices
+        delta = qpos[indices] - self.previous_output_qpos[indices]
+        qpos[indices] = self.previous_output_qpos[indices] + np.clip(
+            delta, -max_step, max_step
+        )
+        return qpos
 
 
     def error1(self):
