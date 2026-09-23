@@ -81,6 +81,7 @@ class GeneralMotionRetargeting:
         self.use_separate_ik_offsets = ik_config.get("use_separate_ik_offsets", False)
         self.posture_cost = ik_config.get("posture_cost", 0.0)
         self.output_joint_velocity_limit = ik_config.get("output_joint_velocity_limit")
+        self._configure_soft_joint_limit(ik_config.get("soft_joint_limit"))
         self.output_fps = output_fps
         self.human_scale_table = ik_config["human_scale_table"]
         self.ground = ik_config["ground_height"] * np.array([0, 0, 1])
@@ -117,6 +118,54 @@ class GeneralMotionRetargeting:
             self.ik_limits.append(mink.VelocityLimit(self.model, VELOCITY_LIMITS)) 
             
         self.setup_retarget_configuration()
+
+    def _configure_soft_joint_limit(self, config):
+        self.soft_joint_limit_cost = None
+        self.soft_joint_limit_qpos_indices = np.array([], dtype=int)
+        self.soft_joint_limit_lower = np.array([], dtype=float)
+        self.soft_joint_limit_upper = np.array([], dtype=float)
+
+        if config is None:
+            return
+
+        margin_ratio = float(config["margin_ratio"])
+        cost = float(config["cost"])
+        joint_names = config["joint_names"]
+
+        if not 0.0 < margin_ratio < 0.5:
+            raise ValueError("soft_joint_limit.margin_ratio must be between 0 and 0.5")
+        if cost <= 0.0:
+            raise ValueError("soft_joint_limit.cost must be positive")
+        if not isinstance(joint_names, list) or not joint_names:
+            raise ValueError("soft_joint_limit.joint_names must be a non-empty list")
+        if len(joint_names) != len(set(joint_names)):
+            raise ValueError("soft_joint_limit.joint_names must not contain duplicates")
+
+        dof_indices = []
+        qpos_indices = []
+        lower_bounds = []
+        upper_bounds = []
+        for joint_name in joint_names:
+            joint_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_JOINT, joint_name)
+            if joint_id < 0:
+                raise ValueError(f"Unknown soft joint limit joint: {joint_name}")
+            if self.model.jnt_type[joint_id] != mj.mjtJoint.mjJNT_HINGE:
+                raise ValueError(f"Soft joint limit joint must be a hinge: {joint_name}")
+            if not self.model.jnt_limited[joint_id]:
+                raise ValueError(f"Soft joint limit joint has no range: {joint_name}")
+
+            lower, upper = self.model.jnt_range[joint_id]
+            margin = margin_ratio * (upper - lower)
+            dof_indices.append(self.model.jnt_dofadr[joint_id])
+            qpos_indices.append(self.model.jnt_qposadr[joint_id])
+            lower_bounds.append(lower + margin)
+            upper_bounds.append(upper - margin)
+
+        self.soft_joint_limit_cost = np.zeros(self.model.nv)
+        self.soft_joint_limit_cost[np.asarray(dof_indices, dtype=int)] = cost
+        self.soft_joint_limit_qpos_indices = np.asarray(qpos_indices, dtype=int)
+        self.soft_joint_limit_lower = np.asarray(lower_bounds)
+        self.soft_joint_limit_upper = np.asarray(upper_bounds)
         
 
     def setup_retarget_configuration(self):
@@ -167,6 +216,14 @@ class GeneralMotionRetargeting:
             self.tasks1.append(self.posture_task)
             self.tasks2.append(self.posture_task)
 
+        self.soft_joint_limit_task = None
+        if self.soft_joint_limit_cost is not None:
+            self.soft_joint_limit_task = mink.PostureTask(
+                self.model, cost=self.soft_joint_limit_cost
+            )
+            self.tasks1.append(self.soft_joint_limit_task)
+            self.tasks2.append(self.soft_joint_limit_task)
+
   
     def update_targets(self, human_data, offset_to_ground=False):
         # scale human data in local frame
@@ -211,6 +268,9 @@ class GeneralMotionRetargeting:
                 else self.configuration.data.qpos.copy()
             )
             self.posture_task.set_target(posture_target)
+
+        if self.soft_joint_limit_task is not None:
+            self._update_soft_joint_limit_target()
 
         if self.use_ik_match_table1:
             # Solve the IK problem
@@ -261,6 +321,16 @@ class GeneralMotionRetargeting:
         if self.posture_task is not None or self.output_joint_velocity_limit is not None:
             self.previous_output_qpos = qpos.copy()
         return qpos
+
+    def _update_soft_joint_limit_target(self):
+        target = self.configuration.data.qpos.copy()
+        indices = self.soft_joint_limit_qpos_indices
+        target[indices] = np.clip(
+            target[indices],
+            self.soft_joint_limit_lower,
+            self.soft_joint_limit_upper,
+        )
+        self.soft_joint_limit_task.set_target(target)
 
     def _enforce_output_frame_limits(self, qpos):
         if self.previous_output_qpos is None or self.output_joint_velocity_limit is None:
