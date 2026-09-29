@@ -107,4 +107,5 @@ motion_data/
 motion_smplx/
 motion_phmr/
 motion_pkl_23dof/
+motion_pkl_29dof/
 motion_csv_23dof/

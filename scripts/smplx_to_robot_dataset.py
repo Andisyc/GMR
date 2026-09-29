@@ -7,6 +7,7 @@ import multiprocessing as mp
 import mujoco as mj
 import numpy as np
 from scipy.spatial.transform import Rotation as R
+from scipy.signal import savgol_filter
 from tqdm import tqdm
 from natsort import natsorted
 from rich import print
@@ -34,6 +35,69 @@ def check_memory(threshold_gb=30):  # adjust based on your available memory
 
 
 HERE = pathlib.Path(__file__).parent
+
+
+def _apply_contact_aware_grounding(
+    root_pos,
+    root_rot,
+    dof_pos,
+    smplx_frame_data_list,
+    aligned_fps,
+    kinematics_model,
+    body_names,
+    grounding_config,
+    device,
+):
+    body_pos, _ = kinematics_model.forward_kinematics(
+        torch.from_numpy(root_pos).to(device=device, dtype=torch.float),
+        torch.from_numpy(root_rot).to(device=device, dtype=torch.float),
+        torch.from_numpy(dof_pos).to(device=device, dtype=torch.float),
+    )
+    body_pos = body_pos.detach().cpu().numpy()
+    body_index = {name: index for index, name in enumerate(body_names)}
+
+    support_items = list(grounding_config["support_bodies"].items())
+    source_foot_pos = np.stack([
+        np.stack([frame[source_name][0] for frame in smplx_frame_data_list])
+        for source_name, _ in support_items
+    ], axis=1)
+    source_foot_speed = np.linalg.norm(
+        np.gradient(source_foot_pos, axis=0) * aligned_fps,
+        axis=2,
+    )
+    source_ground_height = np.percentile(source_foot_pos[..., 2], 2.0)
+    contacts = (
+        source_foot_pos[..., 2]
+        <= source_ground_height + float(grounding_config["contact_height_threshold"])
+    ) & (
+        source_foot_speed <= float(grounding_config["contact_speed_threshold"])
+    )
+
+    support_indices = np.asarray([
+        body_index[robot_name]
+        for _, robot_name in support_items
+    ], dtype=int)
+    support_z = body_pos[:, support_indices, 2]
+    correction = np.full(len(root_pos), np.nan)
+    target_height = float(grounding_config["support_height"])
+    for frame_index, frame_contacts in enumerate(contacts):
+        if np.any(frame_contacts):
+            correction[frame_index] = (
+                target_height - np.min(support_z[frame_index, frame_contacts])
+            )
+
+    valid_frames = np.flatnonzero(np.isfinite(correction))
+    if len(valid_frames) == 0:
+        raise ValueError("No source foot contacts found for contact-aware grounding")
+    correction = np.interp(np.arange(len(correction)), valid_frames, correction[valid_frames])
+
+    smoothing_window = min(int(grounding_config["smoothing_window"]), len(correction))
+    if smoothing_window % 2 == 0:
+        smoothing_window -= 1
+    if smoothing_window >= 3:
+        correction = savgol_filter(correction, smoothing_window, polyorder=2, mode="interp")
+    root_pos[:, 2] += correction
+    return root_pos
 
 
 def process_file(smplx_file_path, tgt_file_path, tgt_robot, SMPLX_FOLDER, tgt_folder, device, total_files, verbose=False):
@@ -117,13 +181,27 @@ def process_file(smplx_file_path, tgt_file_path, tgt_robot, SMPLX_FOLDER, tgt_fo
     
     HEIGHT_ADJUST = True
     if HEIGHT_ADJUST:
-        # height adjust to ensure the lowerset part is on the ground
-        body_pos, _ = kinematics_model.forward_kinematics(torch.from_numpy(root_pos).to(device=device, dtype=torch.float), 
-                                                        torch.from_numpy(root_rot).to(device=device, dtype=torch.float), 
-                                                        torch.from_numpy(dof_pos).to(device=device, dtype=torch.float)) # TxNx3
-        ground_offset = 0.0
-        lowerst_height = torch.min(body_pos[..., 2]).item()
-        root_pos[:, 2] = root_pos[:, 2] - lowerst_height + ground_offset # make sure motion on the ground
+        if retargeter.grounding_config is not None:
+            root_pos = _apply_contact_aware_grounding(
+                root_pos,
+                root_rot,
+                dof_pos,
+                smplx_frame_data_list,
+                aligned_fps,
+                kinematics_model,
+                body_names,
+                retargeter.grounding_config,
+                device,
+            )
+        else:
+            # Preserve the legacy grounding path for robot configs without contact metadata.
+            body_pos, _ = kinematics_model.forward_kinematics(
+                torch.from_numpy(root_pos).to(device=device, dtype=torch.float),
+                torch.from_numpy(root_rot).to(device=device, dtype=torch.float),
+                torch.from_numpy(dof_pos).to(device=device, dtype=torch.float),
+            )
+            lowerst_height = torch.min(body_pos[..., 2]).item()
+            root_pos[:, 2] -= lowerst_height
         
     ROOT_ORIGIN_OFFSET = True
     if ROOT_ORIGIN_OFFSET:
